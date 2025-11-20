@@ -15,11 +15,16 @@ class Base:
         return cls.__name__.lower()
 
 
-class BareBaseModel(Base):
+class TimestampMixin:
+    __abstract__ = True
+
+    created_at = Column(Float, default=datetime.now().timestamp, nullable=False)
+    updated_at = Column(
+        Float, default=datetime.now().timestamp, onupdate=datetime.now().timestamp, nullable=False
+    )
+
+
+class BareBaseModel(TimestampMixin, Base):
     __abstract__ = True
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    created_at = Column(Float, default=datetime.now().timestamp)
-    updated_at = Column(
-        Float, default=datetime.now().timestamp, onupdate=datetime.now().timestamp
-    )

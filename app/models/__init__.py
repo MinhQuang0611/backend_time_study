@@ -2,3 +2,11 @@
 # imported by Alembic
 from app.models.model_base import Base  # noqa
 from app.models.model_user import User  # noqa
+
+# Room Database Entities
+from app.models.model_user_entity import UserEntity  # noqa
+from app.models.model_session import SessionEntity, SessionPauseEntity  # noqa
+from app.models.model_task import TaskEntity, TaskSessionEntity  # noqa
+from app.models.model_goal import GoalEntity  # noqa
+from app.models.model_setting import UserSettingEntity, DefaultSettingEntity  # noqa
+from app.models.model_statistics import StatisticsCacheEntity, StreakRecordEntity  # noqa

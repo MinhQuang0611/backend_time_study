@@ -1,14 +1,15 @@
 import pkgutil
 from importlib import import_module
 from fastapi import APIRouter
-from app.api import api_auth, api_healthcheck
+from app.api import api_auth, api_healthcheck, api_user_entity_auth
 from app.core.config import settings
 import app.api as root_api
 
 router = APIRouter()
 
 router.include_router(api_healthcheck.router, tags=["[Current] Health Check"])
-router.include_router(api_auth.router, tags=["[Current] Auth"])
+# router.include_router(api_auth.router, tags=["[Current] Auth"])
+router.include_router(api_user_entity_auth.router, tags=["[Current] Auth"])
 
 for finder, subpackage_name, is_pkg in pkgutil.iter_modules(root_api.__path__):
     if is_pkg and subpackage_name.startswith("v"):

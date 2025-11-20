@@ -1,0 +1,210 @@
+from typing import Any, List
+from fastapi import APIRouter, Depends, status
+from app.utils.exception_handler import CustomException
+from app.schemas.sche_response import DataResponse
+from app.schemas.sche_base import PaginationParams, SortParams
+from app.schemas.sche_session import (
+    SessionCreateRequest,
+    SessionUpdateRequest,
+    SessionBaseResponse,
+    SessionPauseCreateRequest,
+    SessionPauseUpdateRequest,
+    SessionPauseBaseResponse,
+)
+from app.services.srv_session import SessionService, SessionPauseService
+
+router = APIRouter(prefix=f"/sessions")
+
+session_service: SessionService = SessionService()
+session_pause_service: SessionPauseService = SessionPauseService()
+
+
+# Session endpoints
+@router.get(
+    "/all",
+    response_model=DataResponse[List[SessionBaseResponse]],
+    status_code=status.HTTP_200_OK,
+)
+def get_all() -> Any:
+    try:
+        data, metadata = session_service.get_all()
+        return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
+    except Exception as e:
+        return CustomException(exception=e)
+
+
+@router.get(
+    "",
+    response_model=DataResponse[List[SessionBaseResponse]],
+    status_code=status.HTTP_200_OK,
+)
+def get_by_filter(
+    sort_params: SortParams = Depends(),
+    pagination_params: PaginationParams = Depends(),
+) -> Any:
+    try:
+        data, metadata = session_service.get_by_filter(
+            pagination_params=pagination_params, sort_params=sort_params
+        )
+        return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
+    except Exception as e:
+        return CustomException(exception=e)
+
+
+@router.post(
+    "",
+    response_model=DataResponse[SessionBaseResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+def create(session_data: SessionCreateRequest) -> Any:
+    try:
+        new_session = session_service.create(data=session_data.model_dump())
+        return DataResponse(http_code=status.HTTP_201_CREATED, data=new_session)
+    except Exception as e:
+        raise CustomException(exception=e)
+
+
+@router.get(
+    "/{session_id}",
+    response_model=DataResponse[SessionBaseResponse],
+    status_code=status.HTTP_200_OK,
+)
+def get_by_id(session_id: int) -> Any:
+    try:
+        session = session_service.get_by_id(session_id)
+        return DataResponse(http_code=status.HTTP_200_OK, data=session)
+    except Exception as e:
+        raise CustomException(exception=e)
+
+
+@router.put(
+    "/{session_id}",
+    response_model=DataResponse[SessionBaseResponse],
+    status_code=status.HTTP_200_OK,
+)
+def update_by_id(session_id: int, session_data: SessionUpdateRequest) -> Any:
+    try:
+        updated_session = session_service.update_by_id(session_id, data=session_data.model_dump(exclude_unset=True))
+        return DataResponse(http_code=status.HTTP_200_OK, data=updated_session)
+    except Exception as e:
+        raise CustomException(exception=e)
+
+
+@router.patch(
+    "/{session_id}",
+    response_model=DataResponse[SessionBaseResponse],
+    status_code=status.HTTP_200_OK,
+)
+def partial_update_by_id(session_id: int, session_data: SessionUpdateRequest) -> Any:
+    try:
+        updated_session = session_service.partial_update_by_id(session_id, data=session_data.model_dump(exclude_unset=True))
+        return DataResponse(http_code=status.HTTP_200_OK, data=updated_session)
+    except Exception as e:
+        raise CustomException(exception=e)
+
+
+@router.delete(
+    "/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_by_id(session_id: int) -> None:
+    try:
+        session_service.delete_by_id(session_id)
+    except Exception as e:
+        raise CustomException(exception=e)
+
+
+# Session Pause endpoints
+@router.get(
+    "/pauses/all",
+    response_model=DataResponse[List[SessionPauseBaseResponse]],
+    status_code=status.HTTP_200_OK,
+)
+def get_all_pauses() -> Any:
+    try:
+        data, metadata = session_pause_service.get_all()
+        return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
+    except Exception as e:
+        return CustomException(exception=e)
+
+
+@router.get(
+    "/pauses",
+    response_model=DataResponse[List[SessionPauseBaseResponse]],
+    status_code=status.HTTP_200_OK,
+)
+def get_pauses_by_filter(
+    sort_params: SortParams = Depends(),
+    pagination_params: PaginationParams = Depends(),
+) -> Any:
+    try:
+        data, metadata = session_pause_service.get_by_filter(
+            pagination_params=pagination_params, sort_params=sort_params
+        )
+        return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
+    except Exception as e:
+        return CustomException(exception=e)
+
+
+@router.post(
+    "/pauses",
+    response_model=DataResponse[SessionPauseBaseResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+def create_pause(pause_data: SessionPauseCreateRequest) -> Any:
+    try:
+        new_pause = session_pause_service.create(data=pause_data.model_dump())
+        return DataResponse(http_code=status.HTTP_201_CREATED, data=new_pause)
+    except Exception as e:
+        raise CustomException(exception=e)
+
+
+@router.get(
+    "/pauses/{pause_id}",
+    response_model=DataResponse[SessionPauseBaseResponse],
+    status_code=status.HTTP_200_OK,
+)
+def get_pause_by_id(pause_id: int) -> Any:
+    try:
+        pause = session_pause_service.get_by_id(pause_id)
+        return DataResponse(http_code=status.HTTP_200_OK, data=pause)
+    except Exception as e:
+        raise CustomException(exception=e)
+
+
+@router.put(
+    "/pauses/{pause_id}",
+    response_model=DataResponse[SessionPauseBaseResponse],
+    status_code=status.HTTP_200_OK,
+)
+def update_pause_by_id(pause_id: int, pause_data: SessionPauseUpdateRequest) -> Any:
+    try:
+        updated_pause = session_pause_service.update_by_id(pause_id, data=pause_data.model_dump(exclude_unset=True))
+        return DataResponse(http_code=status.HTTP_200_OK, data=updated_pause)
+    except Exception as e:
+        raise CustomException(exception=e)
+
+
+@router.patch(
+    "/pauses/{pause_id}",
+    response_model=DataResponse[SessionPauseBaseResponse],
+    status_code=status.HTTP_200_OK,
+)
+def partial_update_pause_by_id(pause_id: int, pause_data: SessionPauseUpdateRequest) -> Any:
+    try:
+        updated_pause = session_pause_service.partial_update_by_id(pause_id, data=pause_data.model_dump(exclude_unset=True))
+        return DataResponse(http_code=status.HTTP_200_OK, data=updated_pause)
+    except Exception as e:
+        raise CustomException(exception=e)
+
+
+@router.delete(
+    "/pauses/{pause_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_pause_by_id(pause_id: int) -> None:
+    try:
+        session_pause_service.delete_by_id(pause_id)
+    except Exception as e:
+        raise CustomException(exception=e)
+

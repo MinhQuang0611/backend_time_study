@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Literal
 
 
@@ -9,8 +9,8 @@ class BaseModelResponse(BaseModel):
 
 
 class PaginationParams(BaseModel):
-    page_size: Optional[int] = 10
-    page: Optional[int] = 1
+    page_size: Optional[int] = Field(default=10, gt=0, le=100)
+    page: Optional[int] = Field(default=1, gt=0)
 
 
 class SortParams(BaseModel):

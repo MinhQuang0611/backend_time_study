@@ -15,7 +15,9 @@ class ExceptionType(enum.Enum):
     UNAUTHORIZED = 401, "Unauthorized"
     FORBIDDEN = 403, "Don't have access rights to the content"
     NOT_FOUND = 404, "Resource not found"
+    NOT_MODIFIED = 304, "Resource not modified"
     CONFLICT = 409, "Resource already exists"
+    DUPLICATE_ENTRY = 409, "Duplicate entry: Resource already exists"
     INTERNAL_SERVER_ERROR = 500, "Something went wrong"
 
     def __new__(cls, *args, **kwds):

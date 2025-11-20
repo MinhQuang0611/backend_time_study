@@ -18,6 +18,7 @@ from app.utils.exception_handler import (
 )
 
 logging.config.fileConfig(settings.LOGGING_CONFIG_FILE, disable_existing_loggers=False)
+# Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
 
@@ -62,4 +63,4 @@ def get_application() -> FastAPI:
 
 app = get_application()
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=settings.DEBUG)
+    uvicorn.run(app, host="0.0.0.0", port=8669, reload=settings.DEBUG)

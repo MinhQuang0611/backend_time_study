@@ -6,7 +6,7 @@ from app.models.model_base import BareBaseModel
 
 class User(BareBaseModel):
     
-    __tablename__ = "users"
+    __tablename__ = "users_base"
     
     sso_sub = Column(String, unique=True, index=True)
     username = Column(String, unique=True, index=True)
