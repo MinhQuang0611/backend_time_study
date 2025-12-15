@@ -4,7 +4,7 @@ from app.schemas.sche_base import BaseModelResponse
 
 
 class SessionCreateRequest(BaseModel):
-    user_id: int
+    # user_id is now obtained from JWT token
     session_date: float  # timestamp
     start_time: float  # timestamp
     end_time: Optional[float] = None  # timestamp

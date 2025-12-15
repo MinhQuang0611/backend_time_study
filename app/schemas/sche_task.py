@@ -4,7 +4,7 @@ from app.schemas.sche_base import BaseModelResponse
 
 
 class TaskCreateRequest(BaseModel):
-    user_id: int
+    # user_id is now obtained from JWT token
     title: str
     description: Optional[str] = None
     priority: Optional[str] = "MEDIUM"  # HIGH, MEDIUM, LOW

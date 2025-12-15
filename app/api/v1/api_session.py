@@ -1,6 +1,6 @@
 from typing import Any, List
 from fastapi import APIRouter, Depends, status
-from app.utils.exception_handler import CustomException
+from app.utils.exception_handler import CustomException, ExceptionType
 from app.schemas.sche_response import DataResponse
 from app.schemas.sche_base import PaginationParams, SortParams
 from app.schemas.sche_session import (
@@ -12,6 +12,8 @@ from app.schemas.sche_session import (
     SessionPauseBaseResponse,
 )
 from app.services.srv_session import SessionService, SessionPauseService
+from app.utils.login_manager import AuthenticateUserEntityRequired
+from app.models.model_user_entity import UserEntity
 
 router = APIRouter(prefix=f"/sessions")
 
@@ -25,9 +27,21 @@ session_pause_service: SessionPauseService = SessionPauseService()
     response_model=DataResponse[List[SessionBaseResponse]],
     status_code=status.HTTP_200_OK,
 )
-def get_all() -> Any:
+def get_all(
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired())
+) -> Any:
     try:
-        data, metadata = session_service.get_all()
+        from fastapi_sqlalchemy import db
+        from app.models.model_session import SessionEntity
+        from app.utils.paging import paginate
+        from app.schemas.sche_base import SortParams
+        query = db.session.query(SessionEntity).filter(SessionEntity.user_id == current_user.user_id)
+        data, metadata = paginate(
+            model=SessionEntity,
+            query=query,
+            pagination_params=None,
+            sort_params=SortParams(),
+        )
         return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
     except Exception as e:
         return CustomException(exception=e)
@@ -41,10 +55,18 @@ def get_all() -> Any:
 def get_by_filter(
     sort_params: SortParams = Depends(),
     pagination_params: PaginationParams = Depends(),
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
 ) -> Any:
     try:
-        data, metadata = session_service.get_by_filter(
-            pagination_params=pagination_params, sort_params=sort_params
+        from fastapi_sqlalchemy import db
+        from app.models.model_session import SessionEntity
+        from app.utils.paging import paginate
+        query = db.session.query(SessionEntity).filter(SessionEntity.user_id == current_user.user_id)
+        data, metadata = paginate(
+            model=SessionEntity,
+            query=query,
+            pagination_params=pagination_params,
+            sort_params=sort_params,
         )
         return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
     except Exception as e:
@@ -56,9 +78,14 @@ def get_by_filter(
     response_model=DataResponse[SessionBaseResponse],
     status_code=status.HTTP_201_CREATED,
 )
-def create(session_data: SessionCreateRequest) -> Any:
+def create(
+    session_data: SessionCreateRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
-        new_session = session_service.create(data=session_data.model_dump())
+        session_dict = session_data.model_dump()
+        session_dict["user_id"] = current_user.user_id
+        new_session = session_service.create(data=session_dict)
         return DataResponse(http_code=status.HTTP_201_CREATED, data=new_session)
     except Exception as e:
         raise CustomException(exception=e)
@@ -69,9 +96,14 @@ def create(session_data: SessionCreateRequest) -> Any:
     response_model=DataResponse[SessionBaseResponse],
     status_code=status.HTTP_200_OK,
 )
-def get_by_id(session_id: int) -> Any:
+def get_by_id(
+    session_id: int,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
         session = session_service.get_by_id(session_id)
+        if session.user_id != current_user.user_id:
+            raise CustomException(exception=ExceptionType.FORBIDDEN)
         return DataResponse(http_code=status.HTTP_200_OK, data=session)
     except Exception as e:
         raise CustomException(exception=e)
@@ -82,8 +114,15 @@ def get_by_id(session_id: int) -> Any:
     response_model=DataResponse[SessionBaseResponse],
     status_code=status.HTTP_200_OK,
 )
-def update_by_id(session_id: int, session_data: SessionUpdateRequest) -> Any:
+def update_by_id(
+    session_id: int,
+    session_data: SessionUpdateRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
+        session = session_service.get_by_id(session_id)
+        if session.user_id != current_user.user_id:
+            raise CustomException(exception=ExceptionType.FORBIDDEN)
         updated_session = session_service.update_by_id(session_id, data=session_data.model_dump(exclude_unset=True))
         return DataResponse(http_code=status.HTTP_200_OK, data=updated_session)
     except Exception as e:
@@ -95,8 +134,15 @@ def update_by_id(session_id: int, session_data: SessionUpdateRequest) -> Any:
     response_model=DataResponse[SessionBaseResponse],
     status_code=status.HTTP_200_OK,
 )
-def partial_update_by_id(session_id: int, session_data: SessionUpdateRequest) -> Any:
+def partial_update_by_id(
+    session_id: int,
+    session_data: SessionUpdateRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
+        session = session_service.get_by_id(session_id)
+        if session.user_id != current_user.user_id:
+            raise CustomException(exception=ExceptionType.FORBIDDEN)
         updated_session = session_service.partial_update_by_id(session_id, data=session_data.model_dump(exclude_unset=True))
         return DataResponse(http_code=status.HTTP_200_OK, data=updated_session)
     except Exception as e:
@@ -107,8 +153,14 @@ def partial_update_by_id(session_id: int, session_data: SessionUpdateRequest) ->
     "/{session_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_by_id(session_id: int) -> None:
+def delete_by_id(
+    session_id: int,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> None:
     try:
+        session = session_service.get_by_id(session_id)
+        if session.user_id != current_user.user_id:
+            raise CustomException(exception=ExceptionType.FORBIDDEN)
         session_service.delete_by_id(session_id)
     except Exception as e:
         raise CustomException(exception=e)

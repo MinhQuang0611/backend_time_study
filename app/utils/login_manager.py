@@ -1,7 +1,9 @@
 from fastapi import Depends
 
 from app.models import User
+from app.models.model_user_entity import UserEntity
 from app.services.srv_user import UserService
+from app.services.srv_user_entity import UserEntityService
 from app.utils.exception_handler import CustomException, ExceptionType
 from app.core.security import JWTBearer
 
@@ -13,6 +15,18 @@ class AuthenticateRequired:
     def __call__(self, http_authorization_credentials=Depends(JWTBearer())):
         print("========== Authenticate Required ==========", flush=True)
         return UserService().get_me(http_authorization_credentials)
+
+
+class AuthenticateUserEntityRequired:
+    """
+    Dependency to get current UserEntity from JWT access token.
+    Use this for all UserEntity-based APIs.
+    """
+    def __init__(self):
+        pass
+
+    def __call__(self, http_authorization_credentials=Depends(JWTBearer())):
+        return UserEntityService.get_me(http_authorization_credentials)
 
 
 class PermissionRequired:

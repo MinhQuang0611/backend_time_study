@@ -4,7 +4,7 @@ from app.schemas.sche_base import BaseModelResponse
 
 
 class GoalCreateRequest(BaseModel):
-    user_id: int
+    # user_id is now obtained from JWT token
     goal_date: float  # timestamp
     target_sessions: int
     completed_sessions: Optional[int] = 0

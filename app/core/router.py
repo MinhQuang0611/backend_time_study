@@ -1,7 +1,7 @@
 import pkgutil
 from importlib import import_module
 from fastapi import APIRouter
-from app.api import api_auth, api_healthcheck, api_user_entity_auth
+from app.api import  api_healthcheck, api_user_entity_auth
 from app.core.config import settings
 import app.api as root_api
 

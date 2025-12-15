@@ -26,8 +26,17 @@ class UserEntityLoginRequest(BaseModel):
 
 class UserEntityTokenResponse(BaseModel):
     access_token: str
+    refresh_token: Optional[str] = None
     expires_in: Optional[float] = settings.ACCESS_TOKEN_EXPIRE_SECONDS
     refresh_expires_in: Optional[float] = settings.ACCESS_TOKEN_EXPIRE_SECONDS
     token_type: Optional[str] = "Bearer"
     user: Optional[dict] = None  # User info
+
+
+class FirebaseLoginRequest(BaseModel):
+    firebase_id_token: str
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 

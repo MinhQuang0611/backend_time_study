@@ -4,7 +4,7 @@ from app.schemas.sche_base import BaseModelResponse
 
 
 class UserSettingCreateRequest(BaseModel):
-    user_id: int
+    # user_id is now obtained from JWT token
     setting_key: str
     setting_value: Optional[str] = None
     data_type: Optional[str] = "STRING"  # STRING, INTEGER, BOOLEAN, JSON

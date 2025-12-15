@@ -1,6 +1,6 @@
 from typing import Any, List
 from fastapi import APIRouter, Depends, status
-from app.utils.exception_handler import CustomException
+from app.utils.exception_handler import CustomException, ExceptionType
 from app.schemas.sche_response import DataResponse
 from app.schemas.sche_base import PaginationParams, SortParams
 from app.schemas.sche_task import (
@@ -12,6 +12,8 @@ from app.schemas.sche_task import (
     TaskSessionBaseResponse,
 )
 from app.services.srv_task import TaskService, TaskSessionService
+from app.utils.login_manager import AuthenticateUserEntityRequired
+from app.models.model_user_entity import UserEntity
 
 router = APIRouter(prefix=f"/tasks")
 
@@ -25,9 +27,22 @@ task_session_service: TaskSessionService = TaskSessionService()
     response_model=DataResponse[List[TaskBaseResponse]],
     status_code=status.HTTP_200_OK,
 )
-def get_all() -> Any:
+def get_all(
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired())
+) -> Any:
     try:
-        data, metadata = task_service.get_all()
+        from fastapi_sqlalchemy import db
+        from app.models.model_task import TaskEntity
+        from app.utils.paging import paginate
+        from app.schemas.sche_base import SortParams
+        # Filter by user_id
+        query = db.session.query(TaskEntity).filter(TaskEntity.user_id == current_user.user_id)
+        data, metadata = paginate(
+            model=TaskEntity,
+            query=query,
+            pagination_params=None,
+            sort_params=SortParams(),
+        )
         return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
     except Exception as e:
         return CustomException(exception=e)
@@ -41,10 +56,19 @@ def get_all() -> Any:
 def get_by_filter(
     sort_params: SortParams = Depends(),
     pagination_params: PaginationParams = Depends(),
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
 ) -> Any:
     try:
-        data, metadata = task_service.get_by_filter(
-            pagination_params=pagination_params, sort_params=sort_params
+        from fastapi_sqlalchemy import db
+        from app.models.model_task import TaskEntity
+        from app.utils.paging import paginate
+        # Filter by user_id
+        query = db.session.query(TaskEntity).filter(TaskEntity.user_id == current_user.user_id)
+        data, metadata = paginate(
+            model=TaskEntity,
+            query=query,
+            pagination_params=pagination_params,
+            sort_params=sort_params,
         )
         return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
     except Exception as e:
@@ -56,9 +80,15 @@ def get_by_filter(
     response_model=DataResponse[TaskBaseResponse],
     status_code=status.HTTP_201_CREATED,
 )
-def create(task_data: TaskCreateRequest) -> Any:
+def create(
+    task_data: TaskCreateRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
-        new_task = task_service.create(data=task_data.model_dump())
+        # Add user_id from JWT token
+        task_dict = task_data.model_dump()
+        task_dict["user_id"] = current_user.user_id
+        new_task = task_service.create(data=task_dict)
         return DataResponse(http_code=status.HTTP_201_CREATED, data=new_task)
     except Exception as e:
         raise CustomException(exception=e)
@@ -69,9 +99,15 @@ def create(task_data: TaskCreateRequest) -> Any:
     response_model=DataResponse[TaskBaseResponse],
     status_code=status.HTTP_200_OK,
 )
-def get_by_id(task_id: int) -> Any:
+def get_by_id(
+    task_id: int,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
         task = task_service.get_by_id(task_id)
+        # Verify task belongs to current user
+        if task.user_id != current_user.user_id:
+            raise CustomException(exception=ExceptionType.FORBIDDEN)
         return DataResponse(http_code=status.HTTP_200_OK, data=task)
     except Exception as e:
         raise CustomException(exception=e)
@@ -82,8 +118,16 @@ def get_by_id(task_id: int) -> Any:
     response_model=DataResponse[TaskBaseResponse],
     status_code=status.HTTP_200_OK,
 )
-def update_by_id(task_id: int, task_data: TaskUpdateRequest) -> Any:
+def update_by_id(
+    task_id: int,
+    task_data: TaskUpdateRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
+        task = task_service.get_by_id(task_id)
+        # Verify task belongs to current user
+        if task.user_id != current_user.user_id:
+            raise CustomException(exception=ExceptionType.FORBIDDEN)
         updated_task = task_service.update_by_id(task_id, data=task_data.model_dump(exclude_unset=True))
         return DataResponse(http_code=status.HTTP_200_OK, data=updated_task)
     except Exception as e:
@@ -95,8 +139,16 @@ def update_by_id(task_id: int, task_data: TaskUpdateRequest) -> Any:
     response_model=DataResponse[TaskBaseResponse],
     status_code=status.HTTP_200_OK,
 )
-def partial_update_by_id(task_id: int, task_data: TaskUpdateRequest) -> Any:
+def partial_update_by_id(
+    task_id: int,
+    task_data: TaskUpdateRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
+        task = task_service.get_by_id(task_id)
+        # Verify task belongs to current user
+        if task.user_id != current_user.user_id:
+            raise CustomException(exception=ExceptionType.FORBIDDEN)
         updated_task = task_service.partial_update_by_id(task_id, data=task_data.model_dump(exclude_unset=True))
         return DataResponse(http_code=status.HTTP_200_OK, data=updated_task)
     except Exception as e:
@@ -107,8 +159,15 @@ def partial_update_by_id(task_id: int, task_data: TaskUpdateRequest) -> Any:
     "/{task_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_by_id(task_id: int) -> None:
+def delete_by_id(
+    task_id: int,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> None:
     try:
+        task = task_service.get_by_id(task_id)
+        # Verify task belongs to current user
+        if task.user_id != current_user.user_id:
+            raise CustomException(exception=ExceptionType.FORBIDDEN)
         task_service.delete_by_id(task_id)
     except Exception as e:
         raise CustomException(exception=e)
