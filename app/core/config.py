@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     KEYCLOAK_VERIFY: Optional[bool] = os.environ.get("KEYCLOAK_VERIFY", "False").lower() == "true"
     GOOGLE_CLIENT_ID: Optional[str] = os.environ.get("GOOGLE_CLIENT_ID", None)
     FIREBASE_PROJECT_ID: Optional[str] = os.environ.get("FIREBASE_PROJECT_ID", None)
+    FIREBASE_CREDENTIALS_PATH: Optional[str] = os.environ.get("FIREBASE_CREDENTIALS_PATH", None)
     REFRESH_TOKEN_EXPIRE_SECONDS: int = 60 * 60 * 24 * 30  # Refresh token expired after 30 days
 
 

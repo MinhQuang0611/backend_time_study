@@ -98,14 +98,40 @@ class UserEntityAuthService(object):
         Login with Firebase ID Token.
         Verify Firebase token, find or create user, then return access_token and refresh_token.
         """
+        print("========== FIREBASE LOGIN API CALLED ==========", flush=True)
         firebase_id_token = data.firebase_id_token
         if not firebase_id_token:
-            raise CustomException(exception=ExceptionType.UNAUTHORIZED)
+            print("========== FIREBASE ID TOKEN MISSING ==========", flush=True)
+            raise CustomException(
+                exception=ExceptionType.UNAUTHORIZED,
+                message="Firebase ID Token không được để trống"
+            )
+        
+        print(f"========== VERIFYING FIREBASE TOKEN ==========", flush=True)
+        print(f"Token length: {len(firebase_id_token) if firebase_id_token else 0}", flush=True)
         
         # Verify Firebase ID Token
-        decoded_token = verify_firebase_token(firebase_id_token)
+        decoded_token, error_message = verify_firebase_token(firebase_id_token)
         if not decoded_token:
-            raise CustomException(exception=ExceptionType.UNAUTHORIZED)
+            print("========== FIREBASE TOKEN VERIFICATION FAILED ==========", flush=True)
+            # Check if Firebase is configured
+            from app.core.config import settings
+            if not settings.FIREBASE_PROJECT_ID:
+                raise CustomException(
+                    exception=ExceptionType.INTERNAL_SERVER_ERROR,
+                    message="Firebase chưa được cấu hình. Vui lòng set FIREBASE_PROJECT_ID trong file .env"
+                )
+            # Use detailed error message from verify_firebase_token
+            if "credentials" in error_message.lower() or "Service Account" in error_message:
+                raise CustomException(
+                    exception=ExceptionType.INTERNAL_SERVER_ERROR,
+                    message=error_message
+                )
+            else:
+                raise CustomException(
+                    exception=ExceptionType.UNAUTHORIZED,
+                    message=error_message or "Firebase ID Token không hợp lệ hoặc đã hết hạn"
+                )
         
         # Extract user info from Firebase token
         firebase_uid = decoded_token.get("uid")

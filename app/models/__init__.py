@@ -10,3 +10,4 @@ from app.models.model_task import TaskEntity, TaskSessionEntity  # noqa
 from app.models.model_goal import GoalEntity  # noqa
 from app.models.model_setting import UserSettingEntity, DefaultSettingEntity  # noqa
 from app.models.model_statistics import StatisticsCacheEntity, StreakRecordEntity  # noqa
+from app.models.model_shop import ShopEntity, ShopPurchaseEntity  # noqa

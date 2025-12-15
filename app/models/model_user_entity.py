@@ -28,6 +28,7 @@ class UserEntity(TimestampMixin, Base):
     settings = relationship("UserSettingEntity", back_populates="user", cascade="all, delete-orphan")
     statistics_cache = relationship("StatisticsCacheEntity", back_populates="user", cascade="all, delete-orphan")
     streak_records = relationship("StreakRecordEntity", back_populates="user", cascade="all, delete-orphan")
+    shop_purchases = relationship("ShopPurchaseEntity", back_populates="user", cascade="all, delete-orphan")
     
     # Indexes
     __table_args__ = (

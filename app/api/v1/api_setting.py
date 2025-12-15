@@ -167,12 +167,15 @@ def delete_user_setting_by_id(
 
 
 # Default Setting endpoints
+# Note: Default settings are global, but still require authentication
 @router.get(
     "/default/all",
     response_model=DataResponse[List[DefaultSettingBaseResponse]],
     status_code=status.HTTP_200_OK,
 )
-def get_all_default_settings() -> Any:
+def get_all_default_settings(
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
         data, metadata = default_setting_service.get_all()
         return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
@@ -188,6 +191,7 @@ def get_all_default_settings() -> Any:
 def get_default_settings_by_filter(
     sort_params: SortParams = Depends(),
     pagination_params: PaginationParams = Depends(),
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
 ) -> Any:
     try:
         data, metadata = default_setting_service.get_by_filter(
@@ -203,7 +207,10 @@ def get_default_settings_by_filter(
     response_model=DataResponse[DefaultSettingBaseResponse],
     status_code=status.HTTP_201_CREATED,
 )
-def create_default_setting(setting_data: DefaultSettingCreateRequest) -> Any:
+def create_default_setting(
+    setting_data: DefaultSettingCreateRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
         new_setting = default_setting_service.create(data=setting_data.model_dump())
         return DataResponse(http_code=status.HTTP_201_CREATED, data=new_setting)
@@ -216,7 +223,10 @@ def create_default_setting(setting_data: DefaultSettingCreateRequest) -> Any:
     response_model=DataResponse[DefaultSettingBaseResponse],
     status_code=status.HTTP_200_OK,
 )
-def get_default_setting_by_id(default_setting_id: int) -> Any:
+def get_default_setting_by_id(
+    default_setting_id: int,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
         setting = default_setting_service.get_by_id(default_setting_id)
         return DataResponse(http_code=status.HTTP_200_OK, data=setting)
@@ -229,9 +239,15 @@ def get_default_setting_by_id(default_setting_id: int) -> Any:
     response_model=DataResponse[DefaultSettingBaseResponse],
     status_code=status.HTTP_200_OK,
 )
-def update_default_setting_by_id(default_setting_id: int, setting_data: DefaultSettingUpdateRequest) -> Any:
+def update_default_setting_by_id(
+    default_setting_id: int,
+    setting_data: DefaultSettingUpdateRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
-        updated_setting = default_setting_service.update_by_id(default_setting_id, data=setting_data.model_dump(exclude_unset=True))
+        updated_setting = default_setting_service.update_by_id(
+            default_setting_id, data=setting_data.model_dump(exclude_unset=True)
+        )
         return DataResponse(http_code=status.HTTP_200_OK, data=updated_setting)
     except Exception as e:
         raise CustomException(exception=e)
@@ -242,9 +258,15 @@ def update_default_setting_by_id(default_setting_id: int, setting_data: DefaultS
     response_model=DataResponse[DefaultSettingBaseResponse],
     status_code=status.HTTP_200_OK,
 )
-def partial_update_default_setting_by_id(default_setting_id: int, setting_data: DefaultSettingUpdateRequest) -> Any:
+def partial_update_default_setting_by_id(
+    default_setting_id: int,
+    setting_data: DefaultSettingUpdateRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
     try:
-        updated_setting = default_setting_service.partial_update_by_id(default_setting_id, data=setting_data.model_dump(exclude_unset=True))
+        updated_setting = default_setting_service.partial_update_by_id(
+            default_setting_id, data=setting_data.model_dump(exclude_unset=True)
+        )
         return DataResponse(http_code=status.HTTP_200_OK, data=updated_setting)
     except Exception as e:
         raise CustomException(exception=e)
@@ -254,7 +276,10 @@ def partial_update_default_setting_by_id(default_setting_id: int, setting_data: 
     "/default/{default_setting_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_default_setting_by_id(default_setting_id: int) -> None:
+def delete_default_setting_by_id(
+    default_setting_id: int,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> None:
     try:
         default_setting_service.delete_by_id(default_setting_id)
     except Exception as e:

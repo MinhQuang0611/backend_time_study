@@ -4,7 +4,7 @@ from app.schemas.sche_base import BaseModelResponse
 
 
 class StatisticsCacheCreateRequest(BaseModel):
-    user_id: int
+    # user_id is now obtained from JWT token
     cache_date: float  # timestamp
     cache_type: str  # DAILY, MONTHLY, YEARLY
     total_sessions: Optional[int] = 0
@@ -46,7 +46,7 @@ class StatisticsCacheBaseResponse(BaseModel):
 
 
 class StreakRecordCreateRequest(BaseModel):
-    user_id: int
+    # user_id is now obtained from JWT token
     streak_date: float  # timestamp
     has_activity: Optional[int] = 0
     session_count: Optional[int] = 0

@@ -20,12 +20,51 @@ _firebase_app = None
 if settings.FIREBASE_PROJECT_ID:
     try:
         _firebase_app = firebase_admin.get_app()
+        print("========== FIREBASE APP ALREADY INITIALIZED ==========", flush=True)
     except ValueError:
         # Initialize Firebase Admin SDK if not already initialized
-        # You can also use service account credentials file if needed
-        # cred = credentials.Certificate("path/to/serviceAccountKey.json")
-        # firebase_admin.initialize_app(cred)
-        firebase_admin.initialize_app()
+        try:
+            # Firebase options with project ID
+            firebase_options = {
+                'projectId': settings.FIREBASE_PROJECT_ID,
+            }
+            
+            if settings.FIREBASE_CREDENTIALS_PATH:
+                # Use service account credentials file
+                import os
+                cred_path = os.path.abspath(settings.FIREBASE_CREDENTIALS_PATH)
+                if os.path.exists(cred_path):
+                    cred = credentials.Certificate(cred_path)
+                    _firebase_app = firebase_admin.initialize_app(cred, firebase_options)
+                    print(f"========== FIREBASE INITIALIZED WITH CREDENTIALS FILE: {cred_path} ==========", flush=True)
+                    print(f"Project ID: {settings.FIREBASE_PROJECT_ID}", flush=True)
+                else:
+                    print(f"========== FIREBASE CREDENTIALS FILE NOT FOUND: {cred_path} ==========", flush=True)
+                    # Try to initialize with project ID only (for GCP environments)
+                    _firebase_app = firebase_admin.initialize_app(options=firebase_options)
+                    print("========== FIREBASE INITIALIZED WITH PROJECT ID ONLY (using ADC) ==========", flush=True)
+                    print(f"Project ID: {settings.FIREBASE_PROJECT_ID}", flush=True)
+            else:
+                # Try to use Application Default Credentials (ADC) or environment variable
+                import os
+                google_creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+                if google_creds and os.path.exists(google_creds):
+                    cred = credentials.Certificate(google_creds)
+                    _firebase_app = firebase_admin.initialize_app(cred, firebase_options)
+                    print(f"========== FIREBASE INITIALIZED WITH GOOGLE_APPLICATION_CREDENTIALS: {google_creds} ==========", flush=True)
+                    print(f"Project ID: {settings.FIREBASE_PROJECT_ID}", flush=True)
+                else:
+                    # Try to initialize with project ID only (for GCP environments)
+                    _firebase_app = firebase_admin.initialize_app(options=firebase_options)
+                    print("========== FIREBASE INITIALIZED WITH PROJECT ID ONLY (using ADC) ==========", flush=True)
+                    print(f"Project ID: {settings.FIREBASE_PROJECT_ID}", flush=True)
+        except Exception as e:
+            print(f"========== FIREBASE INITIALIZATION FAILED ==========", flush=True)
+            print(f"Error: {str(e)}", flush=True)
+            print(f"Error type: {type(e).__name__}", flush=True)
+            _firebase_app = None
+else:
+    print("========== FIREBASE_PROJECT_ID NOT SET ==========", flush=True)
 
 
 def create_access_token(
@@ -51,19 +90,39 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_firebase_token(firebase_id_token: str) -> Optional[Dict[str, Any]]:
+def verify_firebase_token(firebase_id_token: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Verify Firebase ID Token and return decoded token claims.
-    Returns None if token is invalid or Firebase is not configured.
+    Returns (decoded_token, error_message) tuple.
+    If successful, returns (decoded_token, None).
+    If failed, returns (None, error_message).
     """
     if not _firebase_app:
-        return None
+        error_msg = "Firebase chưa được cấu hình. Vui lòng set FIREBASE_PROJECT_ID trong file .env"
+        print("========== FIREBASE NOT CONFIGURED ==========", flush=True)
+        print(f"FIREBASE_PROJECT_ID: {settings.FIREBASE_PROJECT_ID}", flush=True)
+        return None, error_msg
     
     try:
         decoded_token = auth.verify_id_token(firebase_id_token)
-        return decoded_token
+        print("========== FIREBASE TOKEN VERIFIED SUCCESSFULLY ==========", flush=True)
+        return decoded_token, None
     except Exception as e:
-        return None
+        error_type = type(e).__name__
+        error_msg = str(e)
+        print("========== FIREBASE TOKEN VERIFICATION FAILED ==========", flush=True)
+        print(f"Error: {error_msg}", flush=True)
+        print(f"Error type: {error_type}", flush=True)
+        
+        # Check for specific error types
+        if "DefaultCredentialsError" in error_type or "credentials" in error_msg.lower():
+            detailed_error = "Firebase cần Service Account Credentials. Vui lòng: 1) Tải Service Account Key từ Firebase Console, 2) Đặt file vào thư mục backend, 3) Set FIREBASE_CREDENTIALS_PATH trong .env"
+        elif "invalid" in error_msg.lower() or "expired" in error_msg.lower():
+            detailed_error = "Firebase ID Token không hợp lệ hoặc đã hết hạn"
+        else:
+            detailed_error = f"Lỗi xác thực Firebase: {error_msg}"
+        
+        return None, detailed_error
 
 
 def create_refresh_token(
