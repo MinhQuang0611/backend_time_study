@@ -27,5 +27,6 @@ class FacebookFriendsResponse(BaseModel):
     total_friends: int
     total_friends_count: Optional[int] = None  # Tổng số bạn bè thực tế của user
     friends_saved: int
+    friends_updated: int = 0  # Số bạn bè đã được cập nhật
     friends: List[FacebookFriendInfo]
     note: Optional[str] = None  # Ghi chú về hạn chế của Facebook API
