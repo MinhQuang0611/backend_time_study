@@ -12,7 +12,7 @@ from app.services.srv_leaderboard import LeaderboardService
 from app.utils.login_manager import AuthenticateUserEntityRequired
 from app.models.model_user_entity import UserEntity
 
-router = APIRouter(prefix="/leaderboard", tags=["Leaderboard"])
+router = APIRouter(prefix="/leaderboard")
 
 
 @router.get(

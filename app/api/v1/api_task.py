@@ -1,5 +1,6 @@
-from typing import Any, List
-from fastapi import APIRouter, Depends, status
+from typing import Any, List, Optional
+from fastapi import APIRouter, Depends, status, Query
+from datetime import datetime, timedelta, timezone
 from app.utils.exception_handler import CustomException, ExceptionType
 from app.schemas.sche_response import DataResponse
 from app.schemas.sche_base import PaginationParams, SortParams
@@ -70,6 +71,87 @@ def get_by_filter(
             pagination_params=pagination_params,
             sort_params=sort_params,
         )
+        return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
+    except Exception as e:
+        return CustomException(exception=e)
+
+
+@router.get(
+    "/filter-by-date",
+    response_model=DataResponse[List[TaskBaseResponse]],
+    status_code=status.HTTP_200_OK,
+)
+def get_tasks_by_date_filter(
+    filter_type: str = Query(..., description="Loại lọc: 'day', 'week', hoặc 'month'"),
+    date: Optional[float] = Query(None, description="Timestamp của ngày cần lọc (nếu không có sẽ dùng ngày hiện tại)"),
+    sort_params: SortParams = Depends(),
+    pagination_params: PaginationParams = Depends(),
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
+    """
+    Lấy danh sách task với lọc theo ngày, tuần, hoặc tháng
+    
+    - filter_type: 'day' (ngày), 'week' (tuần), hoặc 'month' (tháng)
+    - date: Timestamp của ngày cần lọc (optional, mặc định là ngày hiện tại)
+    """
+    try:
+        from fastapi_sqlalchemy import db
+        from app.models.model_task import TaskEntity
+        from app.utils.paging import paginate
+        
+        # Validate filter_type
+        if filter_type not in ['day', 'week', 'month']:
+            raise CustomException(
+                http_code=400,
+                message="filter_type phải là 'day', 'week', hoặc 'month'"
+            )
+        
+        # Xác định ngày cần lọc
+        if date is None:
+            # Dùng ngày hiện tại
+            target_date = datetime.now(timezone.utc)
+        else:
+            target_date = datetime.fromtimestamp(date, tz=timezone.utc)
+        
+        # Tính toán khoảng thời gian dựa trên filter_type
+        if filter_type == 'day':
+            # Lọc theo ngày: từ 00:00:00 đến 23:59:59 của ngày đó
+            start_datetime = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_datetime = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        elif filter_type == 'week':
+            # Lọc theo tuần: từ thứ 2 đến chủ nhật của tuần chứa ngày đó
+            # Tìm thứ 2 của tuần (Monday = 0)
+            days_since_monday = target_date.weekday()
+            start_datetime = (target_date - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_datetime = (start_datetime + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=999999)
+        else:  # month
+            # Lọc theo tháng: từ ngày 1 đến ngày cuối cùng của tháng
+            start_datetime = target_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # Tìm ngày cuối cùng của tháng
+            if target_date.month == 12:
+                next_month = start_datetime.replace(year=target_date.year + 1, month=1)
+            else:
+                next_month = start_datetime.replace(month=target_date.month + 1)
+            end_datetime = (next_month - timedelta(days=1)).replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Chuyển đổi sang timestamp
+        start_timestamp = start_datetime.timestamp()
+        end_timestamp = end_datetime.timestamp()
+        
+        # Query với filter theo user_id và khoảng thời gian
+        query = db.session.query(TaskEntity).filter(
+            TaskEntity.user_id == current_user.user_id,
+            TaskEntity.task_date >= start_timestamp,
+            TaskEntity.task_date <= end_timestamp
+        )
+        
+        data, metadata = paginate(
+            model=TaskEntity,
+            query=query,
+            pagination_params=pagination_params,
+            sort_params=sort_params,
+        )
+        
         return DataResponse(http_code=status.HTTP_200_OK, data=data, metadata=metadata)
     except Exception as e:
         return CustomException(exception=e)
