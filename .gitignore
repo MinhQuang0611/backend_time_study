@@ -82,3 +82,8 @@ docker/
 */.DS_Store
 
 mount-data/
+
+# Firebase credentials
+firebase-credentials.json
+serviceAccountKey.json
+*-firebase-adminsdk-*.json

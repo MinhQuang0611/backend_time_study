@@ -115,7 +115,6 @@ class UserEntityAuthService(object):
         if not decoded_token:
             print("========== FIREBASE TOKEN VERIFICATION FAILED ==========", flush=True)
             # Check if Firebase is configured
-            from app.core.config import settings
             if not settings.FIREBASE_PROJECT_ID:
                 raise CustomException(
                     exception=ExceptionType.INTERNAL_SERVER_ERROR,
@@ -133,14 +132,65 @@ class UserEntityAuthService(object):
                     message=error_message or "Firebase ID Token không hợp lệ hoặc đã hết hạn"
                 )
         
-        # Extract user info from Firebase token
+        # Log toàn bộ decoded_token để xem có gì
+        import json
+        print("========== FIREBASE TOKEN FULL CONTENT ==========", flush=True)
+        print(json.dumps(decoded_token, indent=2, default=str), flush=True)
+        print("=================================================", flush=True)
+        
+        # Extract user info from Firebase token - trích xuất tất cả các trường có thể
         firebase_uid = decoded_token.get("uid")
+        
+        # Tìm email ở nhiều vị trí khác nhau
         email = decoded_token.get("email")
+        if not email:
+            # Thử lấy từ firebase.identities
+            firebase_data = decoded_token.get("firebase", {})
+            identities = firebase_data.get("identities", {})
+            if identities:
+                email_list = identities.get("email", [])
+                if email_list and len(email_list) > 0:
+                    email = email_list[0]
+        
+        # Tìm name ở nhiều vị trí
         name = decoded_token.get("name")
+        if not name:
+            name = decoded_token.get("display_name")
+        if not name:
+            name = decoded_token.get("full_name")
+        
+        # Tìm picture ở nhiều vị trí
         picture = decoded_token.get("picture")
-        # Check if login via Facebook
-        firebase_provider = decoded_token.get("firebase", {}).get("sign_in_provider")
+        if not picture:
+            picture = decoded_token.get("photo_url")
+        if not picture:
+            picture = decoded_token.get("avatar_url")
+        
+        # Lấy thông tin provider
+        firebase_data = decoded_token.get("firebase", {})
+        firebase_provider = firebase_data.get("sign_in_provider")
         is_facebook = firebase_provider == "facebook.com" if firebase_provider else False
+        
+        # Trích xuất thêm các trường khác
+        phone_number = decoded_token.get("phone_number")
+        email_verified = decoded_token.get("email_verified", False)
+        provider_data = decoded_token.get("providerData", [])
+        firebase_identities = firebase_data.get("identities", {})
+        
+        # Log tất cả các trường đã trích xuất
+        print("========== FIREBASE TOKEN EXTRACTED FIELDS ==========", flush=True)
+        print(f"firebase_uid: {firebase_uid}", flush=True)
+        print(f"email: {email}", flush=True)
+        print(f"email_verified: {email_verified}", flush=True)
+        print(f"name: {name}", flush=True)
+        print(f"picture: {picture}", flush=True)
+        print(f"phone_number: {phone_number}", flush=True)
+        print(f"firebase_provider: {firebase_provider}", flush=True)
+        print(f"is_facebook: {is_facebook}", flush=True)
+        print(f"providerData: {provider_data}", flush=True)
+        print(f"firebase.identities: {firebase_identities}", flush=True)
+        print(f"All decoded_token keys: {list(decoded_token.keys())}", flush=True)
+        print("====================================================", flush=True)
         
         if not firebase_uid:
             raise CustomException(
@@ -160,35 +210,67 @@ class UserEntityAuthService(object):
             if not email:
                 email = f"fb_{firebase_uid}@facebook.temp"  # Temporary email, user can update later
             
-            user = UserEntity(
-                email=email,
-                display_name=name,
-                profile_picture_url=picture,
-                hashed_password=None,  # No password for Firebase users
-                is_anonymous=0,  # Firebase users are not anonymous
-                last_login=time_utils.timestamp_now(),
-            )
-            db.session.add(user)
-            db.session.commit()
-            db.session.refresh(user)
+            # Check again if user exists with the generated email (handles case where email was just generated)
+            user = db.session.query(UserEntity).filter(UserEntity.email == email).first()
             
-            # If login via Facebook, create ExternalAccount record
+            if not user:
+                try:
+                    user = UserEntity(
+                        email=email,
+                        display_name=name,
+                        profile_picture_url=picture,
+                        hashed_password=None,  # No password for Firebase users
+                        is_anonymous=0,  # Firebase users are not anonymous
+                        last_login=time_utils.timestamp_now(),
+                    )
+                    db.session.add(user)
+                    db.session.commit()
+                    db.session.refresh(user)
+                except Exception as e:
+                    # Handle race condition: if user was created by another request, fetch it
+                    db.session.rollback()
+                    if "duplicate key" in str(e).lower() or "unique constraint" in str(e).lower():
+                        user = db.session.query(UserEntity).filter(UserEntity.email == email).first()
+                        if not user:
+                            raise  # Re-raise if we still can't find the user
+                        # Update user info since we fetched an existing user
+                        user.last_login = time_utils.timestamp_now()
+                        if name and not user.display_name:
+                            user.display_name = name
+                        if picture and not user.profile_picture_url:
+                            user.profile_picture_url = picture
+                        db.session.commit()
+                    else:
+                        raise  # Re-raise if it's a different error
+            
+            # If login via Facebook, create ExternalAccount record (if not already exists)
             if is_facebook:
                 from app.models.model_external_account import ExternalAccount
                 import time as time_module
-                # Get Facebook ID from token (if available)
-                facebook_id = decoded_token.get("providerData", [{}])[0].get("uid") if decoded_token.get("providerData") else firebase_uid
+                from sqlalchemy import select
                 
-                fb_account = ExternalAccount(
-                    user_id=user.user_id,
-                    provider="facebook",
-                    provider_user_id=facebook_id or firebase_uid,
-                    name=name,
-                    avatar_url=picture,
-                    created_at=time_module.time(),
-                )
-                db.session.add(fb_account)
-                db.session.commit()
+                # Check if already linked
+                existing_fb = db.session.execute(
+                    select(ExternalAccount).where(
+                        ExternalAccount.user_id == user.user_id,
+                        ExternalAccount.provider == "facebook"
+                    )
+                ).scalar_one_or_none()
+                
+                if not existing_fb:
+                    # Get Facebook ID from token (if available)
+                    facebook_id = decoded_token.get("providerData", [{}])[0].get("uid") if decoded_token.get("providerData") else firebase_uid
+                    
+                    fb_account = ExternalAccount(
+                        user_id=user.user_id,
+                        provider="facebook",
+                        provider_user_id=facebook_id or firebase_uid,
+                        name=name,
+                        avatar_url=picture,
+                        created_at=time_module.time(),
+                    )
+                    db.session.add(fb_account)
+                    db.session.commit()
         else:
             # Update last login
             user.last_login = time_utils.timestamp_now()

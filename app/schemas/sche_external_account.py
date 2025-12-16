@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import List, Optional
 
 class FacebookLinkRequest(BaseModel):
     # user_id is now obtained from JWT token
@@ -9,3 +10,22 @@ class FacebookLinkRequest(BaseModel):
 
 class FacebookLinkResponse(BaseModel):
     message: str
+
+
+class FacebookFriendsRequest(BaseModel):
+    access_token: str = Field(..., description="Facebook access token để gọi Graph API")
+
+
+class FacebookFriendInfo(BaseModel):
+    facebook_user_id: str
+    name: Optional[str] = None
+    picture_url: Optional[str] = None
+
+
+class FacebookFriendsResponse(BaseModel):
+    message: str
+    total_friends: int
+    total_friends_count: Optional[int] = None  # Tổng số bạn bè thực tế của user
+    friends_saved: int
+    friends: List[FacebookFriendInfo]
+    note: Optional[str] = None  # Ghi chú về hạn chế của Facebook API

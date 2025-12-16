@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends
 from app.core.database import get_db
 from app.schemas.sche_response import DataResponse
 from app.schemas.sche_user_entity import UserEntityBaseResponse
-from app.schemas.sche_external_account import FacebookLinkRequest, FacebookLinkResponse
+from app.schemas.sche_external_account import (
+    FacebookLinkRequest, 
+    FacebookLinkResponse,
+    FacebookFriendsRequest,
+    FacebookFriendsResponse
+)
 from app.services.srv_user_entity_auth import UserEntityAuthService
 from app.schemas.sche_user_entity_auth import (
     UserEntityLoginRequest,
@@ -15,7 +20,7 @@ from app.schemas.sche_user_entity_auth import (
     FirebaseLoginRequest,
     RefreshTokenRequest,
 )
-from app.services.srv_external_account import link_facebook_account
+from app.services.srv_external_account import link_facebook_account, sync_facebook_friends
 from app.utils.exception_handler import CustomException, ExceptionType
 from app.utils.login_manager import AuthenticateUserEntityRequired
 from app.models.model_user_entity import UserEntity
@@ -63,6 +68,37 @@ def link_facebook(
     )
 
     return {"message": "Facebook linked successfully"}
+
+
+@router.post("/sync/facebook-friends", response_model=DataResponse[FacebookFriendsResponse])
+def sync_facebook_friends_api(
+    data: FacebookFriendsRequest,
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+    db: Session = Depends(get_db),
+):
+    """
+    Đồng bộ danh sách bạn bè Facebook từ Facebook Graph API.
+    Gọi Facebook Graph API /me/friends và lưu vào database.
+    """
+    print("========== SYNC FACEBOOK FRIENDS API CALLED ==========", flush=True)
+    print(f"Current user ID: {current_user.user_id if current_user else 'None'}", flush=True)
+    print(f"Access token received: {bool(data.access_token)}", flush=True)
+    try:
+        result = sync_facebook_friends(
+            db=db,
+            user_id=current_user.user_id,
+            access_token=data.access_token,
+        )
+        print("========== SYNC FACEBOOK FRIENDS SUCCESS ==========", flush=True)
+        return DataResponse(http_code=200, data=result)
+    except Exception as e:
+        print(f"========== ERROR SYNCING FACEBOOK FRIENDS ==========", flush=True)
+        print(f"Error type: {type(e).__name__}", flush=True)
+        print(f"Error message: {str(e)}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        print("====================================================", flush=True)
+        raise CustomException(exception=e)
 
 
 @router.post("/login-firebase", response_model=DataResponse[UserEntityTokenResponse])

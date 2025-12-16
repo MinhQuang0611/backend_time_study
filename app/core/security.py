@@ -182,18 +182,59 @@ class JWTBearer(HTTPBearer):
         super(JWTBearer, self).__init__(auto_error=auto_error)
 
     async def __call__(self, request: Request):
-        credentials: HTTPAuthorizationCredentials = await super(
-            JWTBearer, self
-        ).__call__(request)
-        if credentials is None:
+        print("========== JWTBearer Called ==========", flush=True)
+        print(f"Request path: {request.url.path}", flush=True)
+        auth_header = request.headers.get('authorization')
+        print(f"Authorization header: {'Found' if auth_header else 'NOT FOUND - Please include Authorization: Bearer <token> header'}", flush=True)
+        
+        if not auth_header:
+            print("ERROR: Missing Authorization header. Please include 'Authorization: Bearer <token>' in request headers.", flush=True)
+            raise CustomException(
+                exception=ExceptionType.UNAUTHORIZED,
+                message="Missing Authorization header. Please include 'Authorization: Bearer <token>' in request headers."
+            )
+        
+        try:
+            credentials: HTTPAuthorizationCredentials = await super(
+                JWTBearer, self
+            ).__call__(request)
+            if credentials is None:
+                print("JWTBearer: credentials is None", flush=True)
+                raise CustomException(
+                    exception=ExceptionType.UNAUTHORIZED,
+                    message="Invalid Authorization header format. Expected: 'Authorization: Bearer <token>'"
+                )
+            if not credentials.credentials:
+                print("JWTBearer: credentials.credentials is empty", flush=True)
+                raise CustomException(
+                    exception=ExceptionType.UNAUTHORIZED,
+                    message="Token is empty. Please provide a valid JWT token."
+                )
+            if not credentials.scheme == "Bearer":
+                print(f"JWTBearer: Invalid scheme: {credentials.scheme}. Expected 'Bearer'", flush=True)
+                raise CustomException(
+                    exception=ExceptionType.UNAUTHORIZED,
+                    message=f"Invalid authorization scheme: {credentials.scheme}. Expected 'Bearer'."
+                )
+            if not self.verify_jwt(credentials.credentials):
+                print("JWTBearer: JWT verification failed - token invalid or expired", flush=True)
+                raise CustomException(
+                    exception=ExceptionType.UNAUTHORIZED,
+                    message="Invalid or expired token. Please login again to get a new token."
+                )
+            print("JWTBearer: Token verified successfully", flush=True)
+            return credentials.credentials
+        except CustomException as e:
+            print(f"JWTBearer: CustomException raised: {e.http_code} - {e.message}", flush=True)
+            raise
+        except Exception as e:
+            print(f"JWTBearer: Unexpected exception: {type(e).__name__}: {str(e)}", flush=True)
+            if "Not authenticated" in str(e) or "403" in str(e):
+                raise CustomException(
+                    exception=ExceptionType.UNAUTHORIZED,
+                    message="Authentication required. Please include 'Authorization: Bearer <token>' header."
+                )
             raise CustomException(exception=ExceptionType.UNAUTHORIZED)
-        if not credentials.credentials:
-            raise CustomException(exception=ExceptionType.UNAUTHORIZED)
-        if not credentials.scheme == "Bearer":
-            raise CustomException(exception=ExceptionType.UNAUTHORIZED)
-        if not self.verify_jwt(credentials.credentials):
-            raise CustomException(exception=ExceptionType.UNAUTHORIZED)
-        return credentials.credentials
 
     def verify_jwt(self, jwt_token: str) -> bool:
         is_token_valid: bool = False

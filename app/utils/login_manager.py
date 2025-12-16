@@ -26,7 +26,15 @@ class AuthenticateUserEntityRequired:
         pass
 
     def __call__(self, http_authorization_credentials=Depends(JWTBearer())):
-        return UserEntityService.get_me(http_authorization_credentials)
+        print("========== AuthenticateUserEntityRequired ==========", flush=True)
+        print(f"Token received: {bool(http_authorization_credentials)}", flush=True)
+        try:
+            user = UserEntityService.get_me(http_authorization_credentials)
+            print(f"User authenticated: {user.user_id}", flush=True)
+            return user
+        except Exception as e:
+            print(f"Authentication failed: {type(e).__name__}: {str(e)}", flush=True)
+            raise
 
 
 class PermissionRequired:
