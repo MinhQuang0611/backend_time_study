@@ -10,7 +10,7 @@ x-common-volumes: &common-volumes
     - ./requirements.txt:/app/requirements.txt
     - ./.env:/app/.env
     - ./entrypoint.sh:/app/entrypoint.sh
-    - ./firebase-credentials.json:/app/firebase-credentials.json:ro
+    - ./firebase-credentials.json:/app/firebase-credentials.json
 
 services:
 
