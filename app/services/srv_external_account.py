@@ -52,12 +52,18 @@ def link_facebook_account(
     ).scalar_one_or_none()
 
     if user_fb:
-        raise HTTPException(
-            status_code=400,
-            detail="User already linked Facebook",
-        )
+        # Nếu đã có, update với Facebook ID mới (có thể đang là Firebase UID)
+        print(f"Updating existing external_account: {user_fb.provider_user_id} -> {facebook_id}", flush=True)
+        user_fb.provider_user_id = facebook_id
+        if name:
+            user_fb.name = name
+        if picture:
+            user_fb.avatar_url = picture
+        db.commit()
+        db.refresh(user_fb)
+        return user_fb
 
-    # 3. Link
+    # 3. Link mới
     fb_account = ExternalAccount(
         user_id=user_id,
         provider="facebook",
@@ -113,11 +119,44 @@ def sync_facebook_friends(
         me_response.raise_for_status()
         me_data = me_response.json()
         total_friends_count = me_data.get("friends", {}).get("summary", {}).get("total_count", 0)
+        facebook_user_id = me_data.get("id")  # Facebook ID thực sự của user
         print(f"========== FACEBOOK USER INFO ==========", flush=True)
-        print(f"User ID: {me_data.get('id')}", flush=True)
+        print(f"User ID: {facebook_user_id}", flush=True)
         print(f"User Name: {me_data.get('name')}", flush=True)
         print(f"Total Friends (from summary): {total_friends_count}", flush=True)
         print("========================================", flush=True)
+        
+        # Update external_account với Facebook ID thực sự nếu có
+        if facebook_user_id:
+            from app.models.model_external_account import ExternalAccount
+            user_fb_account = db.execute(
+                select(ExternalAccount).where(
+                    ExternalAccount.user_id == user_id,
+                    ExternalAccount.provider == "facebook"
+                )
+            ).scalar_one_or_none()
+            
+            if user_fb_account:
+                # Nếu provider_user_id là Firebase UID (dài hơn 20 ký tự) hoặc khác Facebook ID
+                if len(user_fb_account.provider_user_id) > 20 or user_fb_account.provider_user_id != str(facebook_user_id):
+                    print(f"Updating external_account: {user_fb_account.provider_user_id} -> {facebook_user_id}", flush=True)
+                    user_fb_account.provider_user_id = str(facebook_user_id)
+                    db.commit()
+                    print(f"Updated external_account with Facebook ID: {facebook_user_id}", flush=True)
+            else:
+                # Nếu chưa có external_account, tạo mới
+                print(f"Creating new external_account with Facebook ID: {facebook_user_id}", flush=True)
+                fb_account = ExternalAccount(
+                    user_id=user_id,
+                    provider="facebook",
+                    provider_user_id=str(facebook_user_id),
+                    name=me_data.get("name"),
+                    avatar_url=None,
+                    created_at=time.time(),
+                )
+                db.add(fb_account)
+                db.commit()
+                print(f"Created external_account with Facebook ID: {facebook_user_id}", flush=True)
     except Exception as e:
         print(f"Warning: Could not fetch user info: {str(e)}", flush=True)
         # Không raise error, tiếp tục với việc lấy friends
@@ -350,4 +389,137 @@ def sync_facebook_friends(
         "friends_updated": friends_updated,
         "friends": friends_list,
         "note": "Facebook API /me/friends only returns friends who have installed this app. This is Facebook's privacy policy since 2015."
+    }
+
+
+def migrate_external_accounts_to_facebook_ids(
+    *,
+    db: Session,
+) -> Dict[str, Any]:
+    """
+    Migration function: Tự động update tất cả external_accounts từ Firebase UID sang Facebook ID thực sự.
+    
+    Logic:
+    1. Tìm tất cả external_accounts có provider='facebook' và provider_user_id là Firebase UID (dài > 20 ký tự)
+    2. Với mỗi user, extract Facebook ID từ profile_picture_url nếu có dạng https://graph.facebook.com/{facebook_id}/picture
+    3. Update external_account với Facebook ID đó
+    
+    Args:
+        db: Database session
+        
+    Returns:
+        Dict chứa thông tin về số lượng accounts đã update
+    """
+    import re
+    
+    print("========== MIGRATING EXTERNAL ACCOUNTS ==========", flush=True)
+    
+    # 1. Tìm tất cả external_accounts có provider='facebook' và provider_user_id là Firebase UID
+    all_external_accounts = db.execute(
+        select(ExternalAccount).where(
+            ExternalAccount.provider == "facebook"
+        )
+    ).scalars().all()
+    
+    print(f"Found {len(all_external_accounts)} Facebook external accounts", flush=True)
+    
+    updated_count = 0
+    skipped_count = 0
+    error_count = 0
+    updated_details = []
+    
+    for ext_account in all_external_accounts:
+        try:
+            provider_user_id = ext_account.provider_user_id
+            
+            # Kiểm tra xem có phải Firebase UID không (dài > 20 ký tự, không phải số thuần)
+            is_firebase_uid = len(provider_user_id) > 20 or not provider_user_id.isdigit()
+            
+            if not is_firebase_uid:
+                # Đã là Facebook ID rồi, skip
+                skipped_count += 1
+                continue
+            
+            # 2. Lấy user để extract Facebook ID từ profile_picture_url
+            user = db.execute(
+                select(User).where(User.user_id == ext_account.user_id)
+            ).scalar_one_or_none()
+            
+            if not user:
+                print(f"User {ext_account.user_id} not found, skipping", flush=True)
+                skipped_count += 1
+                continue
+            
+            facebook_id = None
+            
+            # Extract từ profile_picture_url: https://graph.facebook.com/{facebook_id}/picture
+            if user.profile_picture_url:
+                match = re.search(r'graph\.facebook\.com/(\d+)/picture', user.profile_picture_url)
+                if match:
+                    facebook_id = match.group(1)
+                    print(f"Extracted Facebook ID from profile_picture_url: {facebook_id}", flush=True)
+            
+            # Nếu không tìm được từ profile_picture_url, tìm trong facebook_friends
+            # Tìm xem có user nào khác đã sync friends và có facebook_user_id match với user này không
+            if not facebook_id:
+                # Tìm trong facebook_friends của chính user này (nếu có ai đã sync friends với user này)
+                # Nhưng đây là bạn bè của họ, không phải ID của họ
+                # Tìm trong tất cả facebook_friends xem có facebook_user_id nào đã có external_account với Facebook ID thực sự chưa
+                # Điều này phức tạp, tôi sẽ bỏ qua
+                pass
+            
+            if not facebook_id:
+                print(f"Could not extract Facebook ID for user {ext_account.user_id}, skipping", flush=True)
+                skipped_count += 1
+                continue
+            
+            # 3. Kiểm tra xem Facebook ID này đã được sử dụng bởi user khác chưa
+            existing_account = db.execute(
+                select(ExternalAccount).where(
+                    ExternalAccount.provider == "facebook",
+                    ExternalAccount.provider_user_id == facebook_id,
+                    ExternalAccount.user_id != ext_account.user_id
+                )
+            ).scalar_one_or_none()
+            
+            if existing_account:
+                print(f"Facebook ID {facebook_id} already used by user {existing_account.user_id}, skipping user {ext_account.user_id}", flush=True)
+                skipped_count += 1
+                continue
+            
+            # 4. Update external_account với Facebook ID
+            old_provider_user_id = ext_account.provider_user_id
+            ext_account.provider_user_id = facebook_id
+            db.commit()
+            
+            updated_count += 1
+            updated_details.append({
+                "user_id": ext_account.user_id,
+                "old_provider_user_id": old_provider_user_id,
+                "new_facebook_id": facebook_id,
+                "user_email": user.email,
+                "user_display_name": user.display_name
+            })
+            
+            print(f"Updated user {ext_account.user_id}: {old_provider_user_id} -> {facebook_id}", flush=True)
+            
+        except Exception as e:
+            print(f"Error processing external_account {ext_account.external_account_id}: {str(e)}", flush=True)
+            error_count += 1
+            db.rollback()
+            continue
+    
+    print("================================================", flush=True)
+    print(f"Migration completed:", flush=True)
+    print(f"  - Updated: {updated_count}", flush=True)
+    print(f"  - Skipped: {skipped_count}", flush=True)
+    print(f"  - Errors: {error_count}", flush=True)
+    print("================================================", flush=True)
+    
+    return {
+        "message": "Migration completed",
+        "updated_count": updated_count,
+        "skipped_count": skipped_count,
+        "error_count": error_count,
+        "updated_details": updated_details
     }

@@ -20,7 +20,7 @@ from app.schemas.sche_user_entity_auth import (
     FirebaseLoginRequest,
     RefreshTokenRequest,
 )
-from app.services.srv_external_account import link_facebook_account, sync_facebook_friends
+from app.services.srv_external_account import link_facebook_account, sync_facebook_friends, migrate_external_accounts_to_facebook_ids
 from app.utils.exception_handler import CustomException, ExceptionType
 from app.utils.login_manager import AuthenticateUserEntityRequired
 from app.models.model_user_entity import UserEntity
@@ -59,6 +59,10 @@ def link_facebook(
     current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
     db: Session = Depends(get_db),
 ):
+    """
+    Link hoặc update Facebook account với Facebook ID thực sự.
+    Nếu đã có external_account, sẽ update provider_user_id với Facebook ID mới.
+    """
     link_facebook_account(
         db=db,
         user_id=current_user.user_id,
@@ -67,7 +71,7 @@ def link_facebook(
         picture=data.picture,
     )
 
-    return {"message": "Facebook linked successfully"}
+    return {"message": "Facebook linked/updated successfully"}
 
 
 @router.post("/sync/facebook-friends", response_model=DataResponse[FacebookFriendsResponse])
@@ -126,4 +130,29 @@ def refresh_token(data: RefreshTokenRequest, auth_service: UserEntityAuthService
         return DataResponse(http_code=200, data=token)
     except Exception as e:
         print(e, flush=True)
+        raise CustomException(exception=e)
+
+
+@router.post("/migrate/facebook-ids", response_model=DataResponse[dict])
+def migrate_facebook_ids(
+    db: Session = Depends(get_db),
+):
+    """
+    Migration API: Tự động update tất cả external_accounts từ Firebase UID sang Facebook ID thực sự.
+    
+    Chạy một lần để fix tất cả external_accounts hiện tại.
+    Logic:
+    1. Tìm tất cả external_accounts có provider='facebook' và provider_user_id là Firebase UID
+    2. Extract Facebook ID từ profile_picture_url của user (dạng https://graph.facebook.com/{facebook_id}/picture)
+    3. Update external_account với Facebook ID đó
+    
+    LƯU Ý: API này chỉ chạy một lần, sau đó có thể disable hoặc xóa.
+    """
+    try:
+        result = migrate_external_accounts_to_facebook_ids(db=db)
+        return DataResponse(http_code=200, data=result)
+    except Exception as e:
+        print(f"Migration error: {str(e)}", flush=True)
+        import traceback
+        print(traceback.format_exc(), flush=True)
         raise CustomException(exception=e)

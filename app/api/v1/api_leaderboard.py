@@ -64,31 +64,31 @@ def get_facebook_friends_leaderboard(
         raise CustomException(exception=e)
 
 
-@router.post(
-    "/facebook-friends",
-    response_model=DataResponse[LeaderboardResponse],
-)
-def get_facebook_friends_leaderboard_post(
-    request: LeaderboardRequest,
-    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
-) -> Any:
-    """
-    Lấy leaderboard theo bạn bè Facebook (POST method).
+# @router.post(
+#     "/facebook-friends",
+#     response_model=DataResponse[LeaderboardResponse],
+# )
+# def get_facebook_friends_leaderboard_post(
+#     request: LeaderboardRequest,
+#     current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+# ) -> Any:
+#     """
+#     Lấy leaderboard theo bạn bè Facebook (POST method).
     
-    Cho phép gửi request body với các parameters.
-    """
-    try:
-        result = LeaderboardService.get_leaderboard_data(
-            user_id=current_user.user_id,
-            period=request.period,
-            metric=request.metric,
-            limit=request.limit,
-            include_self=request.include_self
-        )
-        return DataResponse(http_code=200, data=result)
-    except Exception as e:
-        print(f"Error getting leaderboard: {str(e)}", flush=True)
-        import traceback
-        print(traceback.format_exc(), flush=True)
-        raise CustomException(exception=e)
+#     Cho phép gửi request body với các parameters.
+#     """
+#     try:
+#         result = LeaderboardService.get_leaderboard_data(
+#             user_id=current_user.user_id,
+#             period=request.period,
+#             metric=request.metric,
+#             limit=request.limit,
+#             include_self=request.include_self
+#         )
+#         return DataResponse(http_code=200, data=result)
+#     except Exception as e:
+#         print(f"Error getting leaderboard: {str(e)}", flush=True)
+#         import traceback
+#         print(traceback.format_exc(), flush=True)
+#         raise CustomException(exception=e)
 

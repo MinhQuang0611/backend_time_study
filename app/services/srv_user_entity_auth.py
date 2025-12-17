@@ -93,6 +93,54 @@ class UserEntityAuthService(object):
         return res_token
 
     @staticmethod
+    def _extract_facebook_id_from_token(decoded_token: Dict[str, Any], firebase_uid: str) -> str | None:
+        """
+        Extract Facebook ID thực sự từ Firebase decoded token.
+        Thử nhiều cách để tìm Facebook ID, không fallback về Firebase UID.
+        
+        Returns:
+            Facebook ID nếu tìm được, None nếu không tìm được
+        """
+        facebook_id = None
+        
+        # Cách 1: Từ providerData
+        provider_data = decoded_token.get("providerData", [])
+        if provider_data and len(provider_data) > 0:
+            for provider in provider_data:
+                if provider.get("providerId") == "facebook.com":
+                    provider_uid = provider.get("uid")
+                    # Kiểm tra xem có phải Facebook ID không (số, không phải Firebase UID)
+                    if provider_uid and (provider_uid.isdigit() or len(provider_uid) <= 20):
+                        facebook_id = provider_uid
+                        break
+        
+        # Cách 2: Từ firebase.identities.facebook
+        if not facebook_id:
+            firebase_data = decoded_token.get("firebase", {})
+            identities = firebase_data.get("identities", {})
+            facebook_identities = identities.get("facebook.com", [])
+            if facebook_identities and len(facebook_identities) > 0:
+                fb_id = facebook_identities[0]
+                # Kiểm tra xem có phải Facebook ID không
+                if fb_id and (fb_id.isdigit() or len(fb_id) <= 20):
+                    facebook_id = fb_id
+        
+        # Cách 3: Từ sub claim (nếu là Facebook ID format)
+        if not facebook_id:
+            sub = decoded_token.get("sub")
+            # Facebook ID thường là số dài (15-16 chữ số)
+            # Firebase UID thường dài hơn 20 ký tự và có chữ cái
+            if sub and sub.isdigit() and 15 <= len(sub) <= 20:
+                facebook_id = sub
+        
+        if facebook_id:
+            print(f"Extracted Facebook ID from token: {facebook_id}", flush=True)
+        else:
+            print(f"Warning: Could not extract Facebook ID from token. Firebase UID: {firebase_uid}", flush=True)
+        
+        return facebook_id
+
+    @staticmethod
     def login_firebase(data: FirebaseLoginRequest) -> UserEntityTokenResponse:
         """
         Login with Firebase ID Token.
@@ -258,19 +306,42 @@ class UserEntityAuthService(object):
                 ).scalar_one_or_none()
                 
                 if not existing_fb:
-                    # Get Facebook ID from token (if available)
-                    facebook_id = decoded_token.get("providerData", [{}])[0].get("uid") if decoded_token.get("providerData") else firebase_uid
+                    # Get Facebook ID from token - sử dụng helper function
+                    facebook_id = UserEntityAuthService._extract_facebook_id_from_token(decoded_token, firebase_uid)
                     
-                    fb_account = ExternalAccount(
-                        user_id=user.user_id,
-                        provider="facebook",
-                        provider_user_id=facebook_id or firebase_uid,
-                        name=name,
-                        avatar_url=picture,
-                        created_at=time_module.time(),
+                    if not facebook_id:
+                        # Không tạo external_account nếu không tìm được Facebook ID
+                        # User có thể sync friends sau để update
+                        print(f"Warning: Cannot create external_account for user {user.user_id} - Facebook ID not found in token", flush=True)
+                    else:
+                        fb_account = ExternalAccount(
+                            user_id=user.user_id,
+                            provider="facebook",
+                            provider_user_id=facebook_id,  # Luôn lưu Facebook ID thực sự
+                            name=name,
+                            avatar_url=picture,
+                            created_at=time_module.time(),
+                        )
+                        db.session.add(fb_account)
+                        db.session.commit()
+                        print(f"Created external_account with Facebook ID: {facebook_id}", flush=True)
+                else:
+                    # Nếu đã có external account nhưng provider_user_id là Firebase UID
+                    # Cần update nếu có thể lấy được Facebook ID
+                    is_firebase_uid = (
+                        existing_fb.provider_user_id == firebase_uid 
+                        or len(existing_fb.provider_user_id) > 20 
+                        or (not existing_fb.provider_user_id.isdigit() and len(existing_fb.provider_user_id) > 15)
                     )
-                    db.session.add(fb_account)
-                    db.session.commit()
+                    
+                    if is_firebase_uid:
+                        # Có vẻ là Firebase UID, thử update với Facebook ID nếu có
+                        facebook_id = UserEntityAuthService._extract_facebook_id_from_token(decoded_token, firebase_uid)
+                        
+                        if facebook_id and facebook_id != existing_fb.provider_user_id:
+                            print(f"Updating external account with Facebook ID: {facebook_id} (was: {existing_fb.provider_user_id})", flush=True)
+                            existing_fb.provider_user_id = facebook_id
+                            db.session.commit()
         else:
             # Update last login
             user.last_login = time_utils.timestamp_now()
@@ -296,17 +367,42 @@ class UserEntityAuthService(object):
                 ).scalar_one_or_none()
                 
                 if not existing_fb:
-                    facebook_id = decoded_token.get("providerData", [{}])[0].get("uid") if decoded_token.get("providerData") else firebase_uid
-                    fb_account = ExternalAccount(
-                        user_id=user.user_id,
-                        provider="facebook",
-                        provider_user_id=facebook_id or firebase_uid,
-                        name=name,
-                        avatar_url=picture,
-                        created_at=time_module.time(),
+                    # Get Facebook ID from token - sử dụng helper function
+                    facebook_id = UserEntityAuthService._extract_facebook_id_from_token(decoded_token, firebase_uid)
+                    
+                    if not facebook_id:
+                        # Không tạo external_account nếu không tìm được Facebook ID
+                        # User có thể sync friends sau để update
+                        print(f"Warning: Cannot create external_account for user {user.user_id} - Facebook ID not found in token", flush=True)
+                    else:
+                        fb_account = ExternalAccount(
+                            user_id=user.user_id,
+                            provider="facebook",
+                            provider_user_id=facebook_id,  # Luôn lưu Facebook ID thực sự
+                            name=name,
+                            avatar_url=picture,
+                            created_at=time_module.time(),
+                        )
+                        db.session.add(fb_account)
+                        db.session.commit()
+                        print(f"Created external_account with Facebook ID: {facebook_id}", flush=True)
+                else:
+                    # Nếu đã có external account nhưng provider_user_id là Firebase UID
+                    # Cần update nếu có thể lấy được Facebook ID
+                    is_firebase_uid = (
+                        existing_fb.provider_user_id == firebase_uid 
+                        or len(existing_fb.provider_user_id) > 20 
+                        or (not existing_fb.provider_user_id.isdigit() and len(existing_fb.provider_user_id) > 15)
                     )
-                    db.session.add(fb_account)
-                    db.session.commit()
+                    
+                    if is_firebase_uid:
+                        # Có vẻ là Firebase UID, thử update với Facebook ID nếu có
+                        facebook_id = UserEntityAuthService._extract_facebook_id_from_token(decoded_token, firebase_uid)
+                        
+                        if facebook_id and facebook_id != existing_fb.provider_user_id:
+                            print(f"Updating external account with Facebook ID: {facebook_id} (was: {existing_fb.provider_user_id})", flush=True)
+                            existing_fb.provider_user_id = facebook_id
+                            db.session.commit()
         
         # Create access token
         access_token, access_expire = create_access_token(
