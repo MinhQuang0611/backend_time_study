@@ -70,3 +70,25 @@ class StreakRecordBaseResponse(BaseModel):
     created_at: Optional[float] = Field(None, description="Thời gian tạo (Unix timestamp - float)")
     updated_at: Optional[float] = Field(None, description="Thời gian cập nhật lần cuối (Unix timestamp - float)")
 
+
+class DailyStatisticsResponse(BaseModel):
+    """Response cho statistics theo ngày"""
+    date: float = Field(..., description="Timestamp của ngày (00:00:00)")
+    date_string: str = Field(..., description="Ngày dạng string (YYYY-MM-DD)")
+    total_sessions: int = Field(0, description="Tổng số focus sessions")
+    total_focus_time: int = Field(0, description="Tổng thời gian focus (phút)")
+    total_break_time: int = Field(0, description="Tổng thời gian nghỉ (phút)")
+    completed_tasks: int = Field(0, description="Số tasks đã hoàn thành")
+    goal_achieved: int = Field(0, description="Số goals đã đạt được")
+
+
+class MonthlyStatisticsResponse(BaseModel):
+    """Response cho statistics theo tháng"""
+    year: int = Field(..., description="Năm")
+    month: int = Field(..., description="Tháng (1-12)")
+    month_string: str = Field(..., description="Tháng dạng string (YYYY-MM)")
+    total_sessions: int = Field(0, description="Tổng số focus sessions")
+    total_focus_time: int = Field(0, description="Tổng thời gian focus (phút)")
+    total_break_time: int = Field(0, description="Tổng thời gian nghỉ (phút)")
+    completed_tasks: int = Field(0, description="Số tasks đã hoàn thành")
+    goal_achieved: int = Field(0, description="Số goals đã đạt được")

@@ -10,6 +10,8 @@ from app.schemas.sche_statistics import (
     StreakRecordCreateRequest,
     StreakRecordUpdateRequest,
     StreakRecordBaseResponse,
+    DailyStatisticsResponse,
+    MonthlyStatisticsResponse,
 )
 from app.services.srv_statistics import StatisticsCacheService, StreakRecordService
 from app.utils.login_manager import AuthenticateUserEntityRequired
@@ -181,6 +183,65 @@ def delete_statistics_cache_by_id(
             raise CustomException(exception=ExceptionType.FORBIDDEN)
         statistics_cache_service.delete_by_id(cache_id)
     except Exception as e:
+        raise CustomException(exception=e)
+
+
+# Statistics từ sessions (tính toán trực tiếp)
+@router.get(
+    "/daily",
+    response_model=DataResponse[DailyStatisticsResponse],
+    status_code=status.HTTP_200_OK,
+)
+def get_daily_statistics(
+    date: float = Query(..., description="Timestamp của ngày cần lấy (Unix timestamp - float)"),
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
+    """
+    Lấy statistics theo ngày, tính toán trực tiếp từ sessions, tasks, goals
+    """
+    try:
+        stats = StatisticsCacheService.get_daily_statistics(
+            user_id=current_user.user_id,
+            date=date
+        )
+        return DataResponse(
+            http_code=status.HTTP_200_OK,
+            data=DailyStatisticsResponse(**stats)
+        )
+    except Exception as e:
+        import traceback
+        print(f"Error in get_daily_statistics: {str(e)}", flush=True)
+        print(traceback.format_exc(), flush=True)
+        raise CustomException(exception=e)
+
+
+@router.get(
+    "/monthly",
+    response_model=DataResponse[MonthlyStatisticsResponse],
+    status_code=status.HTTP_200_OK,
+)
+def get_monthly_statistics(
+    year: int = Query(..., description="Năm (ví dụ: 2024)", ge=2000, le=2100),
+    month: int = Query(..., description="Tháng (1-12)", ge=1, le=12),
+    current_user: UserEntity = Depends(AuthenticateUserEntityRequired()),
+) -> Any:
+    """
+    Lấy statistics theo tháng, tính toán trực tiếp từ sessions, tasks, goals
+    """
+    try:
+        stats = StatisticsCacheService.get_monthly_statistics(
+            user_id=current_user.user_id,
+            year=year,
+            month=month
+        )
+        return DataResponse(
+            http_code=status.HTTP_200_OK,
+            data=MonthlyStatisticsResponse(**stats)
+        )
+    except Exception as e:
+        import traceback
+        print(f"Error in get_monthly_statistics: {str(e)}", flush=True)
+        print(traceback.format_exc(), flush=True)
         raise CustomException(exception=e)
 
 
