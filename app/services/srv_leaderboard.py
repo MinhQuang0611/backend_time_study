@@ -200,12 +200,20 @@ class LeaderboardService:
             if fb_account:
                 facebook_user_id = fb_account.provider_user_id
                 
-                # Tìm picture_url từ bảng facebook_friends của current_user
-                # (vì facebook_friends lưu thông tin bạn bè của current_user)
-                fb_friend = db.session.query(FacebookFriend).filter(
-                    FacebookFriend.user_id == user_id,  # Current user's friends list
-                    FacebookFriend.facebook_user_id == facebook_user_id
-                ).first()
+                # Tìm picture_url từ bảng facebook_friends
+                # Nếu là bạn bè: tìm trong facebook_friends của current_user
+                # Nếu là current_user: tìm trong facebook_friends của bất kỳ user nào (vì có thể user khác đã sync friends)
+                if friend_user_id == user_id:
+                    # Current user: tìm trong tất cả facebook_friends
+                    fb_friend = db.session.query(FacebookFriend).filter(
+                        FacebookFriend.facebook_user_id == facebook_user_id
+                    ).first()
+                else:
+                    # Friend: tìm trong facebook_friends của current_user
+                    fb_friend = db.session.query(FacebookFriend).filter(
+                        FacebookFriend.user_id == user_id,  # Current user's friends list
+                        FacebookFriend.facebook_user_id == facebook_user_id
+                    ).first()
                 
                 if fb_friend and fb_friend.picture_url:
                     profile_picture_url = fb_friend.picture_url
