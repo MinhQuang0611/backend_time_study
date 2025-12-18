@@ -30,6 +30,7 @@ class UserEntity(TimestampMixin, Base):
     streak_records = relationship("StreakRecordEntity", back_populates="user", cascade="all, delete-orphan")
     shop_purchases = relationship("ShopPurchaseEntity", back_populates="user", cascade="all, delete-orphan")
     facebook_friends = relationship("FacebookFriend", back_populates="user", cascade="all, delete-orphan")
+    user_coin = relationship("UserCoinEntity", back_populates="user", uselist=False, cascade="all, delete-orphan")
     
     # Indexes
     __table_args__ = (

@@ -13,3 +13,4 @@ from app.models.model_statistics import StatisticsCacheEntity, StreakRecordEntit
 from app.models.model_shop import ShopEntity, ShopPurchaseEntity  # noqa
 from app.models.model_external_account import ExternalAccount  # noqa
 from app.models.model_facebook_friend import FacebookFriend  # noqa
+from app.models.model_user_coin import UserCoinEntity  # noqa

@@ -31,6 +31,27 @@ class ShopPurchaseService(BaseService[ShopPurchaseEntity]):
                 message="Sản phẩm này đã được mua rồi"
             )
         
+        # Get shop item to check price
+        shop = db.session.query(ShopEntity).filter(
+            ShopEntity.shop_id == shop_id
+        ).first()
+        
+        if not shop:
+            raise CustomException(
+                exception=ExceptionType.NOT_FOUND,
+                message="Sản phẩm không tồn tại"
+            )
+        
+        # Check coin và trừ coin
+        from app.services.srv_user_coin import UserCoinService
+        coin_service = UserCoinService()
+        
+        # Convert price to int (coin)
+        required_coin = int(shop.price)
+        
+        # Trừ coin (sẽ raise exception nếu không đủ)
+        coin_service.subtract_coin(user_id=user_id, amount=required_coin)
+        
         # Create new purchase
         purchase_data = {
             "user_id": user_id,

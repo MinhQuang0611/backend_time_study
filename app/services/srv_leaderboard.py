@@ -186,16 +186,29 @@ class LeaderboardService:
                 period
             )
             
-            # Lấy Facebook ID nếu có
+            # Lấy Facebook ID và Facebook picture URL từ facebook_friends
             facebook_user_id = None
-            if friend_user_id != user_id:
-                from app.models.model_external_account import ExternalAccount
-                fb_account = db.session.query(ExternalAccount).filter(
-                    ExternalAccount.user_id == friend_user_id,
-                    ExternalAccount.provider == "facebook"
+            profile_picture_url = user.profile_picture_url  # Default: Firebase URL
+            
+            # Lấy Facebook ID từ ExternalAccount
+            from app.models.model_external_account import ExternalAccount
+            fb_account = db.session.query(ExternalAccount).filter(
+                ExternalAccount.user_id == friend_user_id,
+                ExternalAccount.provider == "facebook"
+            ).first()
+            
+            if fb_account:
+                facebook_user_id = fb_account.provider_user_id
+                
+                # Tìm picture_url từ bảng facebook_friends của current_user
+                # (vì facebook_friends lưu thông tin bạn bè của current_user)
+                fb_friend = db.session.query(FacebookFriend).filter(
+                    FacebookFriend.user_id == user_id,  # Current user's friends list
+                    FacebookFriend.facebook_user_id == facebook_user_id
                 ).first()
-                if fb_account:
-                    facebook_user_id = fb_account.provider_user_id
+                
+                if fb_friend and fb_friend.picture_url:
+                    profile_picture_url = fb_friend.picture_url
             
             # Tính score dựa trên metric
             score = LeaderboardService.calculate_score(metrics, metric)
@@ -204,7 +217,7 @@ class LeaderboardService:
                 rank=0,  # Sẽ set sau khi sort
                 user_id=friend_user_id,
                 display_name=user.display_name,
-                profile_picture_url=user.profile_picture_url,
+                profile_picture_url=profile_picture_url,
                 facebook_user_id=facebook_user_id,
                 is_current_user=(friend_user_id == user_id),
                 focus_time=metrics.get("focus_time", 0),
